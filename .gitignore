@@ -1,0 +1,73 @@
+# Build outputs
+bin/
+obj/
+out/
+artifacts/
+
+# User-specific files
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Visual Studio / VS Code
+.vs/
+.vscode/
+
+# Rider / ReSharper
+.idea/
+_ReSharper*/
+*.DotSettings.user
+
+# NuGet
+*.nupkg
+*.snupkg
+packages/
+!packages/build/
+
+# Test / coverage
+TestResults/
+*.trx
+*.coverage
+*.coveragexml
+coverage/
+
+# Logs
+*.log
+
+# .NET local tools / caches
+project.lock.json
+project.fragment.lock.json
+
+# MAUI / Xamarin platform build artifacts
+**/android/bin/
+**/android/obj/
+**/ios/bin/
+**/ios/obj/
+**/maccatalyst/bin/
+**/maccatalyst/obj/
+**/windows/bin/
+**/windows/obj/
+
+# Android
+*.apk
+*.aab
+*.ap_
+*.dex
+
+# Apple
+*.ipa
+*.dSYM/
+
+# Windows packaging
+AppPackages/
+BundleArtifacts/
+
+# Generated local secrets and env
+.env
+.env.*
+local.settings.json
+
+# OS files
+.DS_Store
+Thumbs.db

@@ -1,0 +1,597 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pipes Puzzle</title>
+  <style>
+    :root {
+      --bg: #dcdcdc;
+      --grid: #bebebe;
+      --text: #111111;
+      --panel: #f8f8f8;
+      --dark: #111111;
+      --pipeInnerDry: #ffffff;
+      --pipeInnerWet: #8fc8ff;
+      --valve: #d7263d;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: "Segoe UI", Tahoma, sans-serif;
+      padding: 14px;
+    }
+    .page { max-width: 980px; margin: 0 auto; display: none; }
+    .page.active { display: block; }
+    .card {
+      background: var(--panel);
+      border: 2px solid #1e1e1e;
+      border-radius: 10px;
+      padding: 14px;
+    }
+    h1 { margin: 0 0 8px 0; font-size: 2rem; }
+    .muted { color: #333333; }
+    .sizes, .controls { display: flex; flex-wrap: wrap; gap: 8px; }
+    button {
+      border: 1px solid #222;
+      background: #f1f1f1;
+      color: #111;
+      border-radius: 10px;
+      padding: 8px 12px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    button.active { background: #111; color: #fff; }
+    button.dark { background: #111; color: #fff; }
+    .toolbar { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; margin: 8px 0; }
+    .board-frame {
+      background: #e3e3e3;
+      border: 2px solid #4e4e4e;
+      border-radius: 8px;
+      height: 62vh;
+      min-height: 360px;
+      overflow: auto;
+      padding: 8px;
+    }
+    canvas { display: block; background: #dcdcdc; }
+    .lb-row { display: grid; grid-template-columns: 42px 1fr auto; gap: 8px; padding: 3px 0; }
+    @media (max-width: 720px) {
+      .board-frame { height: 54vh; }
+    }
+  </style>
+</head>
+<body>
+  <section id="landingPage" class="page active">
+    <div class="card">
+      <h1>Pipes Puzzle</h1>
+      <div class="muted">Rotate every tile so all pipes form one connected group with no closed loops.</div>
+    </div>
+    <h3>Choose Grid Size</h3>
+    <div id="landingSizes" class="sizes"></div>
+    <div style="margin-top: 10px;">
+      <button id="toLeaderboardFromLanding" class="dark">Open Leaderboard</button>
+    </div>
+  </section>
+
+  <section id="gamePage" class="page">
+    <div class="toolbar">
+      <button id="backToLanding">Back</button>
+      <div id="gameTitle" style="font-weight: 800; text-align: center;">Puzzle</div>
+      <div id="timer" style="font-weight: 800;">00:00</div>
+    </div>
+
+    <div id="status" class="muted" style="margin-bottom: 8px;">Water is always flowing from the red valve.</div>
+
+    <div class="controls" style="margin-bottom: 8px;">
+      <button id="newPuzzle">New Puzzle</button>
+      <label for="zoom" style="align-self:center;">Zoom</label>
+      <input id="zoom" type="range" min="0.7" max="2.8" value="1" step="0.01" style="width: 200px;">
+      <button id="toLeaderboardFromGame" class="dark">Leaderboard</button>
+    </div>
+
+    <div class="board-frame" id="frame"><canvas id="board"></canvas></div>
+  </section>
+
+  <section id="leaderboardPage" class="page">
+    <div class="toolbar">
+      <button id="leaderboardBack">Back</button>
+      <div style="font-weight: 800; text-align: center;">Leaderboard</div>
+      <div></div>
+    </div>
+
+    <h3>Pick Size</h3>
+    <div id="leaderboardSizes" class="sizes"></div>
+    <div class="card" style="margin-top: 10px;">
+      <div id="lbTitle" style="font-weight: 800; margin-bottom: 6px;">Top 10</div>
+      <div id="lb"></div>
+    </div>
+  </section>
+
+  <script>
+    const DIR = { U: 1, R: 2, D: 4, L: 8 };
+    const ALL = [DIR.U, DIR.R, DIR.D, DIR.L];
+    const sizes = [4, 5, 6, 8, 10, 12, 15, 20, 25];
+
+    const boardCanvas = document.getElementById("board");
+    const ctx = boardCanvas.getContext("2d");
+    const frame = document.getElementById("frame");
+    const timerEl = document.getElementById("timer");
+    const statusEl = document.getElementById("status");
+    const zoomInput = document.getElementById("zoom");
+
+    const landingPage = document.getElementById("landingPage");
+    const gamePage = document.getElementById("gamePage");
+    const leaderboardPage = document.getElementById("leaderboardPage");
+
+    let selectedSize = 8;
+    let leaderboardSize = 8;
+    let zoom = 1;
+    let baseCell = 28;
+    let board = [];
+    let elapsed = 0;
+    let completed = false;
+    let timerHandle = null;
+    let leaderboard = loadLeaderboard();
+
+    function showPage(which) {
+      landingPage.classList.remove("active");
+      gamePage.classList.remove("active");
+      leaderboardPage.classList.remove("active");
+      which.classList.add("active");
+      if (which !== gamePage && timerHandle) clearInterval(timerHandle);
+    }
+
+    function opposite(d) {
+      if (d === DIR.U) return DIR.D;
+      if (d === DIR.R) return DIR.L;
+      if (d === DIR.D) return DIR.U;
+      if (d === DIR.L) return DIR.R;
+      return 0;
+    }
+
+    function step(r, c, d) {
+      if (d === DIR.U) return [r - 1, c];
+      if (d === DIR.R) return [r, c + 1];
+      if (d === DIR.D) return [r + 1, c];
+      return [r, c - 1];
+    }
+
+    function rotate(mask, turns) {
+      let v = mask;
+      let t = ((turns % 4) + 4) % 4;
+      for (let i = 0; i < t; i++) {
+        let n = 0;
+        if (v & DIR.U) n |= DIR.R;
+        if (v & DIR.R) n |= DIR.D;
+        if (v & DIR.D) n |= DIR.L;
+        if (v & DIR.L) n |= DIR.U;
+        v = n;
+      }
+      return v;
+    }
+
+    function popCount(v) {
+      let c = 0;
+      while (v) { v &= (v - 1); c++; }
+      return c;
+    }
+
+    function shuffle(arr) {
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+    }
+
+    class UF {
+      constructor(n) {
+        this.p = [...Array(n).keys()];
+        this.r = Array(n).fill(0);
+      }
+      find(x) {
+        if (this.p[x] !== x) this.p[x] = this.find(this.p[x]);
+        return this.p[x];
+      }
+      union(a, b) {
+        let ra = this.find(a), rb = this.find(b);
+        if (ra === rb) return;
+        if (this.r[ra] < this.r[rb]) this.p[ra] = rb;
+        else if (this.r[ra] > this.r[rb]) this.p[rb] = ra;
+        else { this.p[rb] = ra; this.r[ra]++; }
+      }
+    }
+
+    function buildOpenings(size) {
+      const center = [Math.floor(size / 2), Math.floor(size / 2)];
+      for (let attempt = 0; attempt < 220; attempt++) {
+        const openings = Array.from({ length: size }, () => Array(size).fill(0));
+        const uf = new UF(size * size);
+        const deg = Array(size * size).fill(0);
+        const edges = [];
+
+        for (let r = 0; r < size; r++) {
+          for (let c = 0; c < size; c++) {
+            if (r + 1 < size) edges.push([r, c, r + 1, c, DIR.D]);
+            if (c + 1 < size) edges.push([r, c, r, c + 1, DIR.R]);
+          }
+        }
+
+        shuffle(edges);
+        let chosen = 0;
+
+        for (const [ar, ac, br, bc, d] of edges) {
+          const a = ar * size + ac;
+          const b = br * size + bc;
+          if (uf.find(a) === uf.find(b)) continue;
+
+          const maxA = (ar === center[0] && ac === center[1]) ? 4 : 3;
+          const maxB = (br === center[0] && bc === center[1]) ? 4 : 3;
+          if (deg[a] >= maxA || deg[b] >= maxB) continue;
+
+          uf.union(a, b);
+          deg[a]++; deg[b]++;
+          chosen++;
+
+          openings[ar][ac] |= d;
+          openings[br][bc] |= opposite(d);
+          if (chosen === size * size - 1) break;
+        }
+
+        if (chosen !== size * size - 1) continue;
+        const centerDegree = deg[center[0] * size + center[1]];
+        if (centerDegree < 2) continue;
+
+        let valid = true;
+        for (let r = 0; r < size && valid; r++) {
+          for (let c = 0; c < size; c++) {
+            const d = popCount(openings[r][c]);
+            if (d === 0) { valid = false; break; }
+            if (!(r === center[0] && c === center[1]) && d === 4) { valid = false; break; }
+          }
+        }
+
+        if (valid) return openings;
+      }
+      throw new Error("Failed to generate puzzle");
+    }
+
+    function currentMask(tile) {
+      return tile.isValve ? tile.solution : rotate(tile.solution, tile.rot);
+    }
+
+    function setWater() {
+      for (const row of board) for (const t of row) t.wet = false;
+      const size = board.length;
+      if (!size) return;
+
+      const vr = Math.floor(size / 2), vc = Math.floor(size / 2);
+      const q = [[vr, vc]];
+      const seen = Array.from({ length: size }, () => Array(size).fill(false));
+      seen[vr][vc] = true;
+
+      while (q.length) {
+        const [r, c] = q.shift();
+        board[r][c].wet = true;
+        const m = currentMask(board[r][c]);
+        for (const d of ALL) {
+          if (!(m & d)) continue;
+          const [nr, nc] = step(r, c, d);
+          if (nr < 0 || nc < 0 || nr >= size || nc >= size || seen[nr][nc]) continue;
+          if (currentMask(board[nr][nc]) & opposite(d)) {
+            seen[nr][nc] = true;
+            q.push([nr, nc]);
+          }
+        }
+      }
+    }
+
+    function isSolved() {
+      const size = board.length;
+      let edges = 0;
+      const seen = Array.from({ length: size }, () => Array(size).fill(false));
+      const q = [[0, 0]];
+      seen[0][0] = true;
+      let count = 0;
+
+      while (q.length) {
+        const [r, c] = q.shift();
+        count++;
+        const m = currentMask(board[r][c]);
+
+        for (const d of ALL) {
+          if (!(m & d)) continue;
+          const [nr, nc] = step(r, c, d);
+          if (nr < 0 || nc < 0 || nr >= size || nc >= size) return false;
+          const nm = currentMask(board[nr][nc]);
+          if (!(nm & opposite(d))) return false;
+          if (d === DIR.R || d === DIR.D) edges++;
+          if (!seen[nr][nc]) {
+            seen[nr][nc] = true;
+            q.push([nr, nc]);
+          }
+        }
+      }
+
+      const nodes = size * size;
+      return count === nodes && edges === nodes - 1;
+    }
+
+    function drawGrid(size, cell) {
+      const px = size * cell;
+      ctx.strokeStyle = "#bebebe";
+      ctx.lineWidth = 1;
+      for (let i = 0; i <= size; i++) {
+        const p = i * cell;
+        ctx.beginPath(); ctx.moveTo(p, 0); ctx.lineTo(p, px); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0, p); ctx.lineTo(px, p); ctx.stroke();
+      }
+    }
+
+    function drawBoard() {
+      const size = board.length;
+      const cell = baseCell * zoom;
+      boardCanvas.width = Math.round(size * cell);
+      boardCanvas.height = Math.round(size * cell);
+      ctx.fillStyle = "#dcdcdc";
+      ctx.fillRect(0, 0, boardCanvas.width, boardCanvas.height);
+
+      drawGrid(size, cell);
+
+      const outerStroke = Math.max(5, cell * 0.22);
+      const innerStroke = Math.max(2, cell * 0.11);
+      const centerOuter = Math.max(4, cell * 0.14);
+      const centerInner = Math.max(2, cell * 0.08);
+
+      for (let r = 0; r < size; r++) {
+        for (let c = 0; c < size; c++) {
+          const t = board[r][c];
+          const x = c * cell, y = r * cell;
+          const cx = x + cell / 2, cy = y + cell / 2;
+          const m = currentMask(t);
+          const inner = t.wet ? "#8fc8ff" : "#ffffff";
+
+          ctx.lineCap = "round";
+          ctx.strokeStyle = "#000";
+          ctx.lineWidth = outerStroke;
+          if (m & DIR.U) { ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx, y + 3); ctx.stroke(); }
+          if (m & DIR.R) { ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(x + cell - 3, cy); ctx.stroke(); }
+          if (m & DIR.D) { ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx, y + cell - 3); ctx.stroke(); }
+          if (m & DIR.L) { ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(x + 3, cy); ctx.stroke(); }
+
+          ctx.strokeStyle = inner;
+          ctx.lineWidth = innerStroke;
+          if (m & DIR.U) { ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx, y + 3); ctx.stroke(); }
+          if (m & DIR.R) { ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(x + cell - 3, cy); ctx.stroke(); }
+          if (m & DIR.D) { ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx, y + cell - 3); ctx.stroke(); }
+          if (m & DIR.L) { ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(x + 3, cy); ctx.stroke(); }
+
+          ctx.fillStyle = "#000";
+          ctx.beginPath(); ctx.arc(cx, cy, centerOuter, 0, Math.PI * 2); ctx.fill();
+          ctx.fillStyle = inner;
+          ctx.beginPath(); ctx.arc(cx, cy, centerInner, 0, Math.PI * 2); ctx.fill();
+
+          if (t.isValve) {
+            const vr = Math.max(8, cell * 0.3);
+            ctx.fillStyle = "#d7263d";
+            ctx.beginPath(); ctx.arc(cx, cy, vr, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = "#000";
+            ctx.lineWidth = Math.max(2, cell * 0.08);
+            ctx.beginPath(); ctx.arc(cx, cy, vr, 0, Math.PI * 2); ctx.stroke();
+            ctx.strokeStyle = t.wet ? "#9dd3ff" : "#f4c1c7";
+            ctx.lineWidth = Math.max(2, cell * 0.06);
+            ctx.beginPath();
+            ctx.moveTo(cx - vr * 0.45, cy); ctx.lineTo(cx + vr * 0.45, cy);
+            ctx.moveTo(cx, cy - vr * 0.45); ctx.lineTo(cx, cy + vr * 0.45);
+            ctx.stroke();
+          }
+
+          if (t.kind === "end") {
+            let blocked = 0;
+            if (m & DIR.U) blocked = DIR.D;
+            else if (m & DIR.R) blocked = DIR.L;
+            else if (m & DIR.D) blocked = DIR.U;
+            else if (m & DIR.L) blocked = DIR.R;
+
+            const sr = Math.max(2, cell * 0.09);
+            let sx = cx, sy = cy;
+            if (blocked === DIR.U) sy = y + cell * 0.2;
+            if (blocked === DIR.R) sx = x + cell * 0.8;
+            if (blocked === DIR.D) sy = y + cell * 0.8;
+            if (blocked === DIR.L) sx = x + cell * 0.2;
+
+            ctx.fillStyle = t.wet ? "#b7deff" : "#fff";
+            ctx.beginPath(); ctx.arc(sx, sy, sr, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = "#000";
+            ctx.lineWidth = Math.max(1.5, cell * 0.04);
+            ctx.beginPath(); ctx.arc(sx, sy, sr, 0, Math.PI * 2); ctx.stroke();
+          }
+        }
+      }
+    }
+
+    function formatTime(seconds) {
+      const m = Math.floor(seconds / 60);
+      const s = seconds % 60;
+      return String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0");
+    }
+
+    function loadLeaderboard() {
+      try {
+        return JSON.parse(localStorage.getItem("pipesLeaderboardV1") || "{}");
+      } catch {
+        return {};
+      }
+    }
+
+    function saveLeaderboard() {
+      localStorage.setItem("pipesLeaderboardV1", JSON.stringify(leaderboard));
+    }
+
+    function addScore(size, seconds) {
+      const key = String(size);
+      const list = leaderboard[key] || [];
+      list.push(seconds);
+      list.sort((a, b) => a - b);
+      leaderboard[key] = list.slice(0, 10);
+      saveLeaderboard();
+    }
+
+    function renderLeaderboard(size) {
+      const key = String(size);
+      const list = leaderboard[key] || [];
+      document.getElementById("lbTitle").textContent = `Top 10 for ${size}x${size}`;
+      const el = document.getElementById("lb");
+      if (!list.length) {
+        el.innerHTML = '<div class="lb-row"><div>-</div><div>No recorded times yet</div><div></div></div>';
+        return;
+      }
+      el.innerHTML = list.map((v, i) => `<div class="lb-row"><div>${i + 1}</div><div>${size}x${size}</div><div>${formatTime(v)}</div></div>`).join("");
+    }
+
+    function startTimer() {
+      if (timerHandle) clearInterval(timerHandle);
+      timerHandle = setInterval(() => {
+        if (completed) return;
+        elapsed++;
+        timerEl.textContent = formatTime(elapsed);
+      }, 1000);
+    }
+
+    function kindFromMask(mask, isValve) {
+      if (isValve) return "valve";
+      const d = popCount(mask);
+      if (d === 1) return "end";
+      if (d === 2 && (mask === (DIR.U | DIR.D) || mask === (DIR.L | DIR.R))) return "straight";
+      if (d === 2) return "corner";
+      if (d === 3) return "tee";
+      return "end";
+    }
+
+    function newPuzzle(size) {
+      selectedSize = size;
+      completed = false;
+      elapsed = 0;
+      timerEl.textContent = "00:00";
+      document.getElementById("gameTitle").textContent = `${size}x${size} Puzzle`;
+      statusEl.textContent = "Water is always flowing from the red valve. Only connected pipes fill with water.";
+
+      const center = Math.floor(size / 2);
+      const openings = buildOpenings(size);
+      board = [];
+      for (let r = 0; r < size; r++) {
+        const row = [];
+        for (let c = 0; c < size; c++) {
+          const isValve = r === center && c === center;
+          row.push({
+            solution: openings[r][c],
+            kind: kindFromMask(openings[r][c], isValve),
+            isValve,
+            rot: isValve ? 0 : Math.floor(Math.random() * 4),
+            wet: false
+          });
+        }
+        board.push(row);
+      }
+
+      setWater();
+      drawBoard();
+      updateLandingSizeButtons();
+      startTimer();
+    }
+
+    function updateLandingSizeButtons() {
+      const host = document.getElementById("landingSizes");
+      host.innerHTML = "";
+      for (const s of sizes) {
+        const b = document.createElement("button");
+        b.textContent = `${s}x${s}`;
+        if (s === selectedSize) b.className = "active";
+        b.onclick = () => {
+          newPuzzle(s);
+          showPage(gamePage);
+        };
+        host.appendChild(b);
+      }
+    }
+
+    function updateLeaderboardSizeButtons() {
+      const host = document.getElementById("leaderboardSizes");
+      host.innerHTML = "";
+      for (const s of sizes) {
+        const b = document.createElement("button");
+        b.textContent = `${s}x${s}`;
+        if (s === leaderboardSize) b.className = "active";
+        b.onclick = () => {
+          leaderboardSize = s;
+          updateLeaderboardSizeButtons();
+          renderLeaderboard(s);
+        };
+        host.appendChild(b);
+      }
+    }
+
+    boardCanvas.addEventListener("click", (ev) => {
+      if (completed || !board.length) return;
+      const rect = boardCanvas.getBoundingClientRect();
+      const x = ev.clientX - rect.left;
+      const y = ev.clientY - rect.top;
+      const cell = baseCell * zoom;
+      const c = Math.floor(x / cell);
+      const r = Math.floor(y / cell);
+      if (r < 0 || c < 0 || r >= board.length || c >= board.length) return;
+
+      const tile = board[r][c];
+      if (tile.isValve) return;
+      tile.rot = (tile.rot + 1) % 4;
+
+      setWater();
+      drawBoard();
+
+      if (isSolved()) {
+        completed = true;
+        addScore(selectedSize, elapsed);
+        renderLeaderboard(selectedSize);
+        statusEl.textContent = `Solved ${selectedSize}x${selectedSize} in ${formatTime(elapsed)}`;
+      }
+    });
+
+    document.getElementById("newPuzzle").onclick = () => newPuzzle(selectedSize);
+    document.getElementById("backToLanding").onclick = () => showPage(landingPage);
+    document.getElementById("leaderboardBack").onclick = () => showPage(landingPage);
+
+    document.getElementById("toLeaderboardFromLanding").onclick = () => {
+      leaderboardSize = selectedSize;
+      updateLeaderboardSizeButtons();
+      renderLeaderboard(leaderboardSize);
+      showPage(leaderboardPage);
+    };
+
+    document.getElementById("toLeaderboardFromGame").onclick = () => {
+      leaderboardSize = selectedSize;
+      updateLeaderboardSizeButtons();
+      renderLeaderboard(leaderboardSize);
+      showPage(leaderboardPage);
+    };
+
+    zoomInput.oninput = () => {
+      zoom = Number(zoomInput.value);
+      drawBoard();
+    };
+
+    function refreshBaseCell() {
+      const side = Math.min(frame.clientWidth - 20, frame.clientHeight - 20);
+      baseCell = Math.max(12, side / Math.max(1, selectedSize));
+      drawBoard();
+    }
+
+    window.addEventListener("resize", refreshBaseCell);
+    updateLandingSizeButtons();
+    updateLeaderboardSizeButtons();
+    newPuzzle(selectedSize);
+    showPage(landingPage);
+    refreshBaseCell();
+  </script>
+</body>
+</html>

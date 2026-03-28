@@ -1,0 +1,164 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="PipesPuzzle.MainPage"
+             BackgroundColor="#DFDFDF">
+
+    <Grid>
+        <ScrollView x:Name="LandingView">
+            <VerticalStackLayout Padding="16" Spacing="14">
+                <Border Padding="14"
+                        Stroke="#222222"
+                        StrokeShape="RoundRectangle 10"
+                        BackgroundColor="#F8F8F8">
+                    <VerticalStackLayout Spacing="8">
+                        <Label Text="Pipes Puzzle"
+                               FontSize="34"
+                               FontAttributes="Bold"
+                               TextColor="#141414" />
+                        <Label Text="Rotate every tile so all pipes form one connected group with no closed loops."
+                               FontSize="14"
+                               TextColor="#333333" />
+                    </VerticalStackLayout>
+                </Border>
+
+                <Label Text="Choose Grid Size"
+                       FontSize="17"
+                       FontAttributes="Bold"
+                       TextColor="#161616" />
+
+                <FlexLayout x:Name="LandingSizeButtonsHost"
+                            Wrap="Wrap"
+                            Direction="Row"
+                            JustifyContent="Start"
+                            AlignItems="Center" />
+
+                <Button Text="Open Leaderboard"
+                        Clicked="OnLandingLeaderboardClicked"
+                        BackgroundColor="#1A1A1A"
+                        TextColor="White"
+                        CornerRadius="10"
+                        Padding="12,8" />
+            </VerticalStackLayout>
+        </ScrollView>
+
+        <Grid x:Name="GameView" IsVisible="False" RowDefinitions="Auto,Auto,Auto,Auto,*" Padding="12" RowSpacing="10">
+            <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                <Button Text="Back"
+                        Grid.Column="0"
+                        Clicked="OnBackToLandingClicked"
+                        BackgroundColor="#EAEAEA"
+                        TextColor="#111111"
+                        CornerRadius="8" />
+                <Label x:Name="GameTitleLabel"
+                       Grid.Column="1"
+                       Text="Puzzle"
+                       HorizontalTextAlignment="Center"
+                       VerticalTextAlignment="Center"
+                       FontAttributes="Bold"
+                       TextColor="#121212" />
+                <Label x:Name="TimerLabel"
+                       Grid.Column="2"
+                       Text="00:00"
+                       VerticalTextAlignment="Center"
+                       FontAttributes="Bold"
+                       TextColor="#121212" />
+            </Grid>
+
+            <Label x:Name="StatusLabel"
+                   Grid.Row="1"
+                   Text="Water is always flowing from the center valve."
+                   TextColor="#2A2A2A" />
+
+            <Grid Grid.Row="2" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                <Button Text="New Puzzle"
+                        Grid.Column="0"
+                        Clicked="OnNewPuzzleClicked"
+                        BackgroundColor="#EAEAEA"
+                        TextColor="#111111"
+                        CornerRadius="8" />
+                <Label Grid.Column="1"
+                       Text="Zoom"
+                       VerticalTextAlignment="Center"
+                       TextColor="#1C1C1C" />
+                <Button Text="Leaderboard"
+                        Grid.Column="2"
+                        Clicked="OnGameLeaderboardClicked"
+                        BackgroundColor="#1A1A1A"
+                        TextColor="White"
+                        CornerRadius="8" />
+            </Grid>
+
+            <Slider x:Name="ZoomSlider"
+                    Grid.Row="3"
+                    Minimum="0.7"
+                    Maximum="2.8"
+                    Value="1.0"
+                    ValueChanged="OnZoomChanged" />
+
+            <Border x:Name="BoardFrame"
+                    Grid.Row="4"
+                    Padding="8"
+                    BackgroundColor="#E4E4E4"
+                    Stroke="#4F4F4F"
+                    StrokeThickness="1.5"
+                    StrokeShape="RoundRectangle 8"
+                    HeightRequest="540"
+                    SizeChanged="OnBoardFrameSizeChanged">
+                <ScrollView Orientation="Both">
+                    <GraphicsView x:Name="BoardView"
+                                  StartInteraction="OnBoardStartInteraction"
+                                  BackgroundColor="#DDDDDD" />
+                </ScrollView>
+            </Border>
+        </Grid>
+
+        <ScrollView x:Name="LeaderboardView" IsVisible="False">
+            <VerticalStackLayout Padding="12" Spacing="10">
+                <Grid ColumnDefinitions="Auto,*" ColumnSpacing="8">
+                    <Button Text="Back"
+                            Grid.Column="0"
+                            Clicked="OnBackToLandingClicked"
+                            BackgroundColor="#EAEAEA"
+                            TextColor="#111111"
+                            CornerRadius="8" />
+                    <Label Grid.Column="1"
+                           Text="Leaderboard"
+                           FontAttributes="Bold"
+                           VerticalTextAlignment="Center"
+                           HorizontalTextAlignment="Center"
+                           TextColor="#101010" />
+                </Grid>
+
+                <Label Text="Pick Size"
+                       FontAttributes="Bold"
+                       TextColor="#101010" />
+
+                <FlexLayout x:Name="LeaderboardSizeButtonsHost"
+                            Wrap="Wrap"
+                            Direction="Row"
+                            JustifyContent="Start"
+                            AlignItems="Center" />
+
+                <Label x:Name="LeaderboardTitle"
+                       Text="Top 10"
+                       FontAttributes="Bold"
+                       TextColor="#101010" />
+
+                <CollectionView x:Name="LeaderboardList"
+                                SelectionMode="None">
+                    <CollectionView.ItemTemplate>
+                        <DataTemplate>
+                            <Grid ColumnDefinitions="42,*,Auto" Padding="4">
+                                <Label Grid.Column="0" Text="{Binding Rank}" TextColor="#111111" />
+                                <Label Grid.Column="1" Text="{Binding Label}" TextColor="#111111" />
+                                <Label Grid.Column="2" Text="{Binding TimeText}" TextColor="#111111" />
+                            </Grid>
+                        </DataTemplate>
+                    </CollectionView.ItemTemplate>
+                </CollectionView>
+            </VerticalStackLayout>
+        </ScrollView>
+    </Grid>
+
+</ContentPage>
