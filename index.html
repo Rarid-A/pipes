@@ -87,7 +87,7 @@
     <div class="controls" style="margin-bottom: 8px;">
       <button id="newPuzzle">New Puzzle</button>
       <label for="zoom" style="align-self:center;">Zoom</label>
-      <input id="zoom" type="range" min="0.7" max="2.8" value="1" step="0.01" style="width: 200px;">
+      <input id="zoom" type="range" min="0.5" max="6" value="1" step="0.01" style="width: 220px;">
       <button id="toLeaderboardFromGame" class="dark">Leaderboard</button>
     </div>
 
@@ -141,6 +141,14 @@
       leaderboardPage.classList.remove("active");
       which.classList.add("active");
       if (which !== gamePage && timerHandle) clearInterval(timerHandle);
+
+      if (which === gamePage) {
+        // Delay sizing until after the game page is visible in layout.
+        requestAnimationFrame(() => {
+          refreshBaseCell();
+          drawBoard();
+        });
+      }
     }
 
     function opposite(d) {
@@ -473,6 +481,8 @@
       selectedSize = size;
       completed = false;
       elapsed = 0;
+      zoom = 1;
+      zoomInput.value = "1";
       timerEl.textContent = "00:00";
       document.getElementById("gameTitle").textContent = `${size}x${size} Puzzle`;
       statusEl.textContent = "Water is always flowing from the red valve. Only connected pipes fill with water.";
@@ -496,6 +506,7 @@
       }
 
       setWater();
+      refreshBaseCell();
       drawBoard();
       updateLandingSizeButtons();
       startTimer();
@@ -509,8 +520,8 @@
         b.textContent = `${s}x${s}`;
         if (s === selectedSize) b.className = "active";
         b.onclick = () => {
-          newPuzzle(s);
           showPage(gamePage);
+          newPuzzle(s);
         };
         host.appendChild(b);
       }
@@ -581,8 +592,17 @@
     };
 
     function refreshBaseCell() {
-      const side = Math.min(frame.clientWidth - 20, frame.clientHeight - 20);
-      baseCell = Math.max(12, side / Math.max(1, selectedSize));
+      const frameW = frame.clientWidth;
+      const frameH = frame.clientHeight;
+
+      // If the game panel is hidden, fall back to viewport-based sizing.
+      const safeW = frameW > 0 ? frameW - 20 : Math.max(260, window.innerWidth * 0.78);
+      const safeH = frameH > 0 ? frameH - 20 : Math.max(260, window.innerHeight * 0.58);
+      const side = Math.min(safeW, safeH);
+
+      // Fill most of the frame by default and preserve readability at larger sizes.
+      const fitCell = side / Math.max(1, selectedSize);
+      baseCell = Math.max(16, fitCell * 0.96);
       drawBoard();
     }
 
